@@ -30,7 +30,13 @@ jobs:
         run: ./build/EngineTests_artefacts/Release/EngineTests
 
   macos:
-    runs-on: macos-15-intel
+    # GitHub's Mac machines are often at capacity: ask for both kinds; each builds the same universal
+    # installer and whichever finishes publishes it.
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - name: Configure (universal)
@@ -72,7 +78,7 @@ jobs:
           hdiutil create -volname "Bash Browser" -srcfolder dmg -ov -format UDZO "Bash-Browser-mac.dmg"
       - uses: actions/upload-artifact@v4
         with:
-          name: Bash-Browser-mac
+          name: Bash-Browser-mac-${{ matrix.runner }}
           path: Bash-Browser-mac.dmg
       - name: Publish as release
         if: github.ref == 'refs/heads/main'
@@ -80,6 +86,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release delete latest -y --cleanup-tag || true
-          gh release create latest Bash-Browser-mac.dmg --title "Bash Browser (latest build)" \
+          gh release view latest >/dev/null 2>&1 || gh release create latest --title "Bash Browser (latest build)" \
             --notes "Mac installer for Bash Browser by Kalabash. Open the DMG and run Bash Browser Installer.pkg (right-click > Open the first time)."
+          gh release upload latest Bash-Browser-mac.dmg --clobber
+          gh release edit latest --notes "Mac installer for Bash Browser by Kalabash, built from ${GITHUB_SHA::7}. Open the DMG and run Bash Browser Installer.pkg (right-click > Open the first time)."
