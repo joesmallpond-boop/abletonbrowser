@@ -1,0 +1,31 @@
+name: Publish installer
+
+# Publishes the DMG from a finished Build run as a GitHub Release (direct download link).
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Build run ID to publish"
+        required: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Bash-Browser-mac
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete latest -y --cleanup-tag || true
+          gh release create latest Bash-Browser-mac.dmg --title "Bash Browser (latest build)" \
+            --notes "Mac installer for Bash Browser by Kalabash. Open the DMG and run Bash Browser Installer.pkg (right-click > Open the first time)."
