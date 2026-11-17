@@ -40,19 +40,21 @@ SampleBrowserEditor::SampleBrowserEditor (SampleBrowserProcessor& p)
     };
     rescanButton.setTooltip ("Look for new or changed sounds now");
     rescanButton.onClick = [this] { library.rescan(); };
-    playButton.setTooltip ("Play / stop the selected sound (space)");
+    playButton.setTooltip ("Preview on/off. Space bar starts and stops Live: the preview plays in time with it");
     playButton.onClick = [this] { togglePlay(); };
 
     warp.addItem ("Off", 1); warp.addItem ("Re-Pitch", 2); warp.addItem ("Stretch", 3);
     warp.setTooltip ("Warp previews to the project tempo. Stretch keeps the pitch; Re-Pitch speeds up/slows down like a record");
     warp.onChange = [this] { proc.previewSettings.warp = (WarpMode) (warp.getSelectedId() - 1); proc.previewSettingsChanged(); };
-    sync.addItem ("Immediately", 1); sync.addItem ("Next beat", 2); sync.addItem ("Next bar", 3); sync.addItem ("In phase", 4);
-    sync.setTooltip ("When the song is playing, previews start on the next beat or bar (on the one), or jump in at the matching point of the loop");
+    sync.addItem ("Immediately", 1); sync.addItem ("Next beat", 2); sync.addItem ("Next bar", 3);
+    sync.setTooltip ("Previews follow Live's transport. Loops with a tempo are locked to the song position (they start on bar 1 "
+                     "of the loop and stay in time). One-shots start on the next beat or bar; tick Loop to repeat them on it.");
     sync.onChange = [this] { proc.previewSettings.sync = (SyncMode) (sync.getSelectedId() - 1); };
     dragMode.addItem ("Drag original file", 1);
     dragMode.addItem ("Drag trimmed + tempo-matched", 2);
     dragMode.setTooltip ("What you get when you drag a sound into Live");
     dragMode.onChange = [this] { proc.previewSettings.dragProcessed = dragMode.getSelectedId() == 2; };
+    loopToggle.setTooltip ("Repeat one-shots on every beat/bar while Live plays (loops always loop)");
     loopToggle.onClick = [this] { proc.previewSettings.loop = loopToggle.getToggleState(); proc.previewSettingsChanged(); };
     autoPlay.setTooltip ("Play sounds as soon as they're selected");
     autoPlay.onClick = [this] { proc.previewSettings.autoPlay = autoPlay.getToggleState(); };
@@ -81,7 +83,6 @@ SampleBrowserEditor::SampleBrowserEditor (SampleBrowserProcessor& p)
     table.onDoubleClick = [this] (const SampleInfo& s) { proc.loadIntoSampler (s); proc.audition (s); };
     table.onToggleFavourite = [this] (const SampleInfo& s) { library.editSample (s.path, [] (SampleInfo& x) { x.favourite = ! x.favourite; }); };
     table.onRightClick = [this] (const SampleInfo& s, const MouseEvent&) { showRowMenu (s); };
-    table.onSpace = [this] { togglePlay(); };
     if (proc.uiState.isObject()) table.setSortState (proc.uiState["sort"]);
 
     // ---- waveform, tags, sampler ----
@@ -140,7 +141,7 @@ void SampleBrowserEditor::syncSettingsToUi()
 {
     auto& s = proc.previewSettings;
     warp.setSelectedId ((int) s.warp + 1, dontSendNotification);
-    sync.setSelectedId ((int) s.sync + 1, dontSendNotification);
+    sync.setSelectedId (s.sync == SyncMode::InPhase ? 3 : (int) s.sync + 1, dontSendNotification);
     dragMode.setSelectedId (s.dragProcessed ? 2 : 1, dontSendNotification);
     loopToggle.setToggleState (s.loop, dontSendNotification);
     autoPlay.setToggleState (s.autoPlay, dontSendNotification);
@@ -205,7 +206,7 @@ void SampleBrowserEditor::select (const SampleInfo& info, bool play)
 
 void SampleBrowserEditor::togglePlay()
 {
-    if (proc.getPreview().isPlaying() || proc.getPreview().isWaiting()) { proc.stopAudition(); return; }
+    if (proc.getPreview().isArmed()) { proc.stopAudition(); return; }
     if (auto* s = find (proc.selectedPath)) proc.audition (*s);
 }
 
@@ -272,7 +273,7 @@ void SampleBrowserEditor::showRowMenu (const SampleInfo& info)
 
 bool SampleBrowserEditor::keyPressed (const KeyPress& k)
 {
-    if (k == KeyPress::spaceKey && ! search.hasKeyboardFocus (true)) { togglePlay(); return true; }
+    // Space is left for Live, so it starts/stops the set (and the preview follows the transport).
     if (k.getModifiers().isCommandDown() && k.getKeyCode() == 'F') { search.grabKeyboardFocus(); return true; }
     return false;
 }
@@ -297,7 +298,7 @@ void SampleBrowserEditor::timerCallback()
         }
 
     auto& preview = proc.getPreview();
-    const auto playingPath = preview.isPlaying() || preview.isWaiting() ? preview.currentPath() : String();
+    const auto playingPath = preview.isArmed() ? preview.currentPath() : String();
     table.setPlayingPath (playingPath);
     playButton.setButtonText (playingPath.isNotEmpty() ? "Stop" : "Play");
     playButton.setToggleState (playingPath.isNotEmpty(), dontSendNotification);
@@ -371,7 +372,7 @@ void SampleBrowserEditor::resized()
     autoPlay.setBounds (header.removeFromRight (82));
     loopToggle.setBounds (header.removeFromRight (56)); header.removeFromRight (4);
     sync.setBounds (header.removeFromRight (104));
-    syncLabel.setBounds (header.removeFromRight (36));
+    syncLabel.setBounds (header.removeFromRight (62));
     warp.setBounds (header.removeFromRight (92));
     warpLabel.setBounds (header.removeFromRight (40)); header.removeFromRight (4);
     playButton.setBounds (header.removeFromRight (60)); header.removeFromRight (8);

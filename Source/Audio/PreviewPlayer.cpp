@@ -2,6 +2,8 @@
 
 namespace sb
 {
+static constexpr int kFadeLen = 64;
+
 void PreviewPlayer::play (std::shared_ptr<PreviewClip> c)
 {
     {
@@ -9,7 +11,7 @@ void PreviewPlayer::play (std::shared_ptr<PreviewClip> c)
         path = c ? c->path : juce::String();
     }
     stopRequested = false;
-    waiting = c != nullptr;
+    armed = c != nullptr;
     incoming.post (std::move (c));
 }
 
@@ -19,6 +21,7 @@ void PreviewPlayer::stop()
         const juce::SpinLock::ScopedLockType sl (pathLock);
         path.clear();
     }
+    armed = false;
     stopRequested = true;
 }
 
@@ -33,141 +36,158 @@ void PreviewPlayer::prepare (double sampleRate)
     sr = sampleRate;
 }
 
+void PreviewPlayer::renderFree (juce::AudioBuffer<float>& out, int start, int from, int to, float gain, bool wrap)
+{
+    if (! freePlaying || clip == nullptr) return;
+    const auto& a = clip->audio;
+    const int len = clip->loop && clip->loopLength > 0 ? juce::jmin (clip->loopLength, a.getNumSamples()) : a.getNumSamples();
+    const int outCh = out.getNumChannels();
+    for (int i = from; i < to; ++i)
+    {
+        if (freePos >= len)
+        {
+            if (wrap && len > 0) freePos = 0;
+            else { freePlaying = false; return; }
+        }
+        float g = gain;
+        if (fadeIn > 0) { g *= 1.0f - (float) fadeIn / (float) kFadeLen; --fadeIn; }
+        for (int c = 0; c < outCh; ++c)
+            out.addSample (c, start + i, a.getSample (juce::jmin (c, a.getNumChannels() - 1), (int) freePos) * g);
+        ++freePos;
+    }
+}
+
 void PreviewPlayer::process (juce::AudioBuffer<float>& out, int start, int num,
                              const juce::AudioPlayHead::PositionInfo* info, SyncMode sync, float gain)
 {
-    // ---- fade-out tail of the previous clip (avoids clicks when switching) ----
     std::shared_ptr<PreviewClip> fresh;
-    const bool gotNew = incoming.take (fresh);
+    if (incoming.take (fresh))
+    {
+        const bool sameSound = fresh && clip && fresh->keepPhase && fresh->path == clip->path;
+        trash.release (std::move (clip));
+        clip = std::move (fresh);
+        if (clip != nullptr && ! sameSound)
+        {
+            newlyArmed = true;
+            playedSinceArm = false;
+            freePlaying = false;
+            freePos = 0;
+            lockedActive = false;
+        }
+        else if (clip != nullptr && freePlaying)
+        {
+            // re-rendered for a new tempo: keep the same relative position
+            freePos = juce::jmin<juce::int64> (freePos, clip->audio.getNumSamples());
+        }
+    }
 
-    if (stopRequested.exchange (false) && ! gotNew)
+    if (stopRequested.exchange (false))
     {
         trash.release (std::move (clip));
-        playing = false; waiting = false; playheadSec = -1.0;
-        startDelay = -1;
+        freePlaying = false; lockedActive = false; newlyArmed = false;
+    }
+
+    const bool hostPlaying = info != nullptr && info->getIsPlaying() && info->getPpqPosition().hasValue()
+                             && info->getBpm().hasValue() && *info->getBpm() > 0;
+    hostRunning = hostPlaying;
+
+    if (clip == nullptr || clip->audio.getNumSamples() == 0)
+    {
+        audible = false; playheadSec = -1.0;
+        hostWasPlaying = hostPlaying;
         return;
     }
 
-    std::shared_ptr<PreviewClip> fading;
-    juce::int64 fadingPos = 0;
-    if (gotNew)
+    // ---------------- Live stopped ----------------
+    if (! hostPlaying)
     {
-        const bool keep = fresh && clip && fresh->keepPhase && fresh->path == clip->path && startDelay == 0;
-        double norm = 0;
-        if (keep && clip->audio.getNumSamples() > 0)
-            norm = (double) pos / (double) (clip->loop && clip->loopLength > 0 ? clip->loopLength : clip->audio.getNumSamples());
-        if (clip && startDelay == 0 && ! keep) { fading = clip; fadingPos = pos; }
-        else trash.release (std::move (clip));
-        if (keep) trash.release (std::move (clip));
-        clip = std::move (fresh);
-
-        if (clip == nullptr) { playing = false; waiting = false; startDelay = -1; }
-        else if (keep)
+        if (hostWasPlaying)
         {
-            const auto len = clip->loop && clip->loopLength > 0 ? clip->loopLength : clip->audio.getNumSamples();
-            pos = (juce::int64) (norm * len);
-            startDelay = 0;
+            // transport stopped: preview stops with it, ready to start again in time
+            freePlaying = false; lockedActive = false; playedSinceArm = false;
         }
-        else
-        {
-            pos = 0;
-            startDelay = 0;
-            const bool hostPlaying = info != nullptr && info->getIsPlaying() && info->getPpqPosition().hasValue()
-                                     && info->getBpm().hasValue() && *info->getBpm() > 0;
-            if (hostPlaying && sync != SyncMode::Immediate)
-            {
-                const double ppq = *info->getPpqPosition();
-                const double bpm = *info->getBpm();
-                const double samplesPerBeat = 60.0 / bpm * sr;
-                int numer = 4, denom = 4;
-                if (auto ts = info->getTimeSignature()) { numer = ts->numerator; denom = ts->denominator; }
-                const double beatLen = 4.0 / denom;
-                const double barLen = numer * beatLen;
-
-                if (sync == SyncMode::InPhase && clip->tempoSynced && clip->loop && clip->loopLength > 0)
-                {
-                    // jump straight in at the loop position that matches the song position
-                    const double barStart = info->getPpqPositionOfLastBarStart().orFallback (std::floor (ppq / barLen) * barLen);
-                    const double loopBeats = clip->loopLength / samplesPerBeat;
-                    const double intoBar = ppq - barStart;
-                    // whole bars since an arbitrary reference, so multi-bar loops line up with bar 1
-                    const double barsFromZero = std::round (barStart / barLen);
-                    double phase = std::fmod (barsFromZero * barLen + intoBar, loopBeats);
-                    if (phase < 0) phase += loopBeats;
-                    pos = (juce::int64) (phase * samplesPerBeat);
-                }
-                else if (sync != SyncMode::InPhase)
-                {
-                    const double grid = sync == SyncMode::NextBar ? barLen : beatLen;
-                    double target;
-                    if (sync == SyncMode::NextBar)
-                    {
-                        const double barStart = info->getPpqPositionOfLastBarStart().orFallback (std::floor (ppq / barLen) * barLen);
-                        target = barStart;
-                        while (target < ppq - 1e-4) target += grid;
-                    }
-                    else
-                        target = std::ceil (ppq / grid - 1e-4) * grid;
-                    startDelay = juce::jmax<juce::int64> (0, (juce::int64) std::round ((target - ppq) * samplesPerBeat));
-                }
-            }
-            playing = true;
-        }
+        hostWasPlaying = false;
+        if (newlyArmed) { freePlaying = true; freePos = 0; fadeIn = kFadeLen; playedSinceArm = true; }
+        newlyArmed = false;
+        renderFree (out, start, 0, num, gain, clip->loop);
+        audible = freePlaying;
+        playheadSec = freePlaying ? clip->sourceOffsetSec + (double) freePos / sr * clip->sourceSpeed : -1.0;
+        return;
     }
 
+    // ---------------- Live playing ----------------
+    if (! hostWasPlaying) { playedSinceArm = false; freePlaying = false; lockedActive = false; }
+    hostWasPlaying = true;
+    newlyArmed = false;
+
+    const double ppq = *info->getPpqPosition();
+    const double bpm = *info->getBpm();
+    const double samplesPerBeat = 60.0 / bpm * sr;
+    const double beatsPerSample = 1.0 / samplesPerBeat;
+    const auto& a = clip->audio;
     const int outCh = out.getNumChannels();
 
-    if (fading != nullptr)
+    if (clip->tempoSynced && clip->loop && clip->loopBeats > 0 && clip->loopLength > 0)
     {
-        const int fadeLen = juce::jmin (num, 256);
-        const auto& a = fading->audio;
-        for (int i = 0; i < fadeLen; ++i)
+        // Locked to the song: sample index follows the song position every sample.
+        const int loopLen = juce::jmin (clip->loopLength, a.getNumSamples());
+        if (! lockedActive) fadeIn = kFadeLen;
+        double idx = 0;
+        for (int i = 0; i < num; ++i)
         {
-            auto p = fadingPos + i;
-            if (fading->loop && fading->loopLength > 0) p %= fading->loopLength;
-            if (p >= a.getNumSamples()) break;
-            const float g = gain * (1.0f - (float) i / (float) fadeLen);
+            double phase = std::fmod (ppq + i * beatsPerSample, clip->loopBeats);
+            if (phase < 0) phase += clip->loopBeats;
+            idx = phase / clip->loopBeats * loopLen;
+            const int i0 = juce::jlimit (0, loopLen - 1, (int) idx);
+            float g = gain;
+            if (fadeIn > 0) { g *= 1.0f - (float) fadeIn / (float) kFadeLen; --fadeIn; }
             for (int c = 0; c < outCh; ++c)
-                out.addSample (c, start + i, a.getSample (juce::jmin (c, a.getNumChannels() - 1), (int) p) * g);
+                out.addSample (c, start + i, a.getSample (juce::jmin (c, a.getNumChannels() - 1), i0) * g);
         }
-        trash.release (std::move (fading));
+        lockedActive = true;
+        freePlaying = false;
+        audible = true;
+        playheadSec = clip->sourceOffsetSec + idx / sr * clip->sourceSpeed;
+        return;
     }
+    lockedActive = false;
 
-    if (clip == nullptr || startDelay < 0) { playheadSec = -1.0; return; }
+    // Triggered: start on the next beat/bar (repeat on it when looping).
+    int numer = 4, denom = 4;
+    if (auto ts = info->getTimeSignature()) { numer = juce::jmax (1, ts->numerator); denom = juce::jmax (1, ts->denominator); }
+    const double beatLen = 4.0 / denom;
+    const double barLen = numer * beatLen;
+    const double ppqEnd = ppq + num * beatsPerSample;
 
-    int i = 0;
-    if (startDelay > 0)
+    juce::Array<int> triggers;
+    if (sync == SyncMode::Immediate)
     {
-        const auto skip = (int) juce::jmin<juce::int64> (startDelay, num);
-        startDelay -= skip;
-        i = skip;
-        waiting = startDelay > 0;
-        if (startDelay > 0) { playheadSec = -1.0; return; }
+        if (! playedSinceArm) triggers.add (0);
     }
-    waiting = false;
-
-    const auto& a = clip->audio;
-    const int len = a.getNumSamples();
-    const int loopLen = clip->loop && clip->loopLength > 0 ? juce::jmin (clip->loopLength, len) : len;
-    const int fadeIn = (pos == 0) ? 64 : 0;
-    for (; i < num; ++i)
+    else
     {
-        if (pos >= loopLen)
+        const double grid = sync == SyncMode::NextBeat ? beatLen : barLen;
+        const double origin = sync == SyncMode::NextBeat ? 0.0
+                            : info->getPpqPositionOfLastBarStart().orFallback (std::floor (ppq / barLen) * barLen);
+        double b = origin + std::ceil ((ppq - origin) / grid - 1e-9) * grid;
+        for (; b < ppqEnd && triggers.size() < 64; b += grid)
         {
-            if (clip->loop && loopLen > 0) pos = 0;
-            else
-            {
-                trash.release (std::move (clip));
-                playing = false; playheadSec = -1.0;
-                return;
-            }
+            if (playedSinceArm && ! clip->retrigger) break;
+            triggers.add (juce::jlimit (0, num - 1, (int) std::round ((b - ppq) * samplesPerBeat)));
+            playedSinceArm = true;
         }
-        float g = gain;
-        if (fadeIn > 0 && pos < fadeIn) g *= (float) pos / (float) fadeIn;
-        for (int c = 0; c < outCh; ++c)
-            out.addSample (c, start + i, a.getSample (juce::jmin (c, a.getNumChannels() - 1), (int) pos) * g);
-        ++pos;
     }
-    playheadSec = clip->sourceOffsetSec + (double) pos / sr * clip->sourceSpeed;
+
+    int pos = 0;
+    for (int t : triggers)
+    {
+        renderFree (out, start, pos, t, gain, clip->loop && ! clip->retrigger);
+        freePlaying = true; freePos = 0; fadeIn = juce::jmin (kFadeLen, 16);
+        playedSinceArm = true;
+        pos = t;
+    }
+    renderFree (out, start, pos, num, gain, clip->loop && ! clip->retrigger);
+    audible = freePlaying;
+    playheadSec = freePlaying ? clip->sourceOffsetSec + (double) freePos / sr * clip->sourceSpeed : -1.0;
 }
 }

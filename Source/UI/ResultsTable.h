@@ -27,7 +27,6 @@ public:
     std::function<void (const SampleInfo&)> onDoubleClick;   // load into sampler
     std::function<void (const SampleInfo&)> onToggleFavourite;
     std::function<void (const SampleInfo&, const juce::MouseEvent&)> onRightClick;
-    std::function<void()> onSpace;
 
     void resized() override;
     bool keyPressed (const juce::KeyPress&) override;

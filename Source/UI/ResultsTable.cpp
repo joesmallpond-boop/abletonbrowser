@@ -207,7 +207,6 @@ void ResultsTable::selectedRowsChanged (int lastRow)
 
 bool ResultsTable::keyPressed (const KeyPress& k)
 {
-    if (k == KeyPress::spaceKey) { if (onSpace) onSpace(); return true; }
     return false;
 }
 

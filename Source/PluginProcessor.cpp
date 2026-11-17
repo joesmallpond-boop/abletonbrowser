@@ -103,10 +103,12 @@ std::shared_ptr<PreviewClip> SampleBrowserProcessor::renderClip (const SampleInf
             const double srcSec = (loaded->length() - startSample) / sr;
             const double beats = juce::jmax (1.0, std::round (srcSec * bpm / 60.0));
             clip->loopLength = juce::jmin (audio.getNumSamples(), (int) std::round (beats * 60.0 / target * sr));
+            clip->loopBeats = beats;
         }
     }
     if (clip->loopLength <= 0) clip->loopLength = audio.getNumSamples();
-    clip->loop = settings.loop;
+    clip->loop = isLoop || settings.loop;
+    clip->retrigger = settings.loop && ! isLoop && ! clip->tempoSynced;
 
     // short fade at the end to avoid a click
     const int fadeLen = juce::jmin (audio.getNumSamples(), (int) (0.003 * sr));
@@ -155,7 +157,7 @@ void SampleBrowserProcessor::previewSettingsChanged()
         const juce::ScopedLock sl (auditionLock);
         if (auditioning) info = std::make_unique<SampleInfo> (*auditioning);
     }
-    if (info == nullptr || ! preview.isPlaying()) return;
+    if (info == nullptr || ! preview.isArmed()) return;
     const int ticket = ++auditionTicket;
     const double target = hostBpm.load();
     auditionRenderedBpm = target;
@@ -249,7 +251,7 @@ void SampleBrowserProcessor::timerCallback()
 
     // re-render the playing preview when the project tempo moves
     const double bpm = hostBpm.load();
-    if (previewSettings.warp != WarpMode::Off && preview.isPlaying() && auditionRenderedBpm > 0
+    if (previewSettings.warp != WarpMode::Off && preview.isArmed() && auditionRenderedBpm > 0
         && std::abs (bpm / auditionRenderedBpm - 1.0) > 0.002)
         previewSettingsChanged();
 

@@ -60,7 +60,7 @@ private:
     juce::TextEditor search;
     juce::ComboBox warp, sync, dragMode;
     juce::ToggleButton loopToggle { "Loop" }, autoPlay { "Auto-play" }, loadOnSelect { "To sampler" }, trim { "Skip silence" };
-    juce::Label warpLabel { {}, "Warp" }, syncLabel { {}, "Start" };
+    juce::Label warpLabel { {}, "Warp" }, syncLabel { {}, "One-shots" };
 
     FilterPanel filters;
     ResultsTable table;

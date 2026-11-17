@@ -142,6 +142,67 @@ int main()
     s = firstSound (SyncMode::NextBar);
     check (s <= 1, "transport stopped: starts at once (" + juce::String (s) + ")");
 
+    std::cout << "\nTransport lock\n";
+    {
+        PreviewPlayer lp;
+        lp.prepare (sr);
+        const double spb = 60.0 / 120.0 * sr;            // 24000 samples per beat
+        auto loopClip = std::make_shared<PreviewClip>();
+        const int loopLen = (int) (4 * spb);              // one bar
+        loopClip->audio.setSize (1, loopLen);
+        for (int i = 0; i < loopLen; ++i) loopClip->audio.setSample (0, i, (float) i / loopLen);
+        loopClip->loop = true; loopClip->tempoSynced = true; loopClip->loopBeats = 4; loopClip->loopLength = loopLen;
+        loopClip->path = "loop";
+
+        juce::AudioPlayHead::PositionInfo p;
+        p.setIsPlaying (true); p.setBpm (120.0); p.setPpqPositionOfLastBarStart (4.0);
+        p.setTimeSignature (juce::AudioPlayHead::TimeSignature { 4, 4 });
+        auto block = [&] (double ppq, bool playing, int n = 512) {
+            p.setPpqPosition (ppq); p.setIsPlaying (playing);
+            juce::AudioBuffer<float> o (1, n); o.clear();
+            lp.process (o, 0, n, &p, SyncMode::NextBar, 1.0f);
+            return o;
+        };
+
+        lp.play (loopClip);
+        auto o = block (5.0, true);   // beat 2 of bar 2
+        check (std::abs (o.getSample (0, 200) - (float) ((spb + 200) / loopLen)) < 1e-3f,
+               "loop selected mid-song plays from the matching point (beat 2)");
+        o = block (5.0 + 512 / spb, true);
+        check (std::abs (o.getSample (0, 0) - (float) ((spb + 512) / loopLen)) < 1e-3f, "stays locked across blocks");
+        o = block (13.0, true);       // Live jumped (loop brace / locator)
+        check (std::abs (o.getSample (0, 200) - (float) ((spb + 200) / loopLen)) < 1e-3f, "follows Live when the song position jumps");
+        o = block (13.5, false);
+        check (o.getMagnitude (0, 0, 512) == 0.0f, "Live stops -> preview stops");
+        o = block (0.0, true);        // space bar: Live starts from the top
+        check (o.getSample (0, 0) == 0.0f && std::abs (o.getSample (0, 300) - (float) (300.0 / loopLen)) < 1e-3f,
+               "Live starts -> loop starts on the one, in time");
+
+        // tempo change: still locked to beats (loop rendered for 120 bpm, Live now at 90)
+        p.setBpm (90.0);
+        o = block (2.0, true);
+        check (std::abs (o.getSample (0, 200) - (float) ((2.0 + 200 / (60.0 / 90.0 * sr)) / 4.0)) < 1e-3f, "stays on the beat after a tempo change");
+        p.setBpm (120.0);
+
+        // one-shot repeated on every beat while Live plays (Loop ticked)
+        auto hit = std::make_shared<PreviewClip>();
+        hit->audio.setSize (1, 400); for (int i = 0; i < 400; ++i) hit->audio.setSample (0, i, 1.0f);
+        hit->loop = true; hit->retrigger = true; hit->path = "hit";
+        lp.play (hit);
+        juce::Array<int> starts;
+        double ppq = 3.9;
+        for (int b = 0; b < 120; ++b)
+        {
+            p.setPpqPosition (ppq); p.setIsPlaying (true);
+            juce::AudioBuffer<float> ob (1, 512); ob.clear();
+            lp.process (ob, 0, 512, &p, SyncMode::NextBeat, 1.0f);
+            for (int i = 1; i < 512; ++i) if (ob.getSample (0, i) > 0 && ob.getSample (0, i - 1) == 0) starts.add ((int) std::round ((ppq + i / spb) * 100));
+            ppq += 512 / spb;
+        }
+        check (starts.size() >= 2 && std::abs (starts[0] - 400) <= 1 && std::abs (starts[1] - 500) <= 1,
+               "one-shot with Loop repeats on each beat (" + juce::String (starts.size()) + " hits)");
+    }
+
     std::cout << "\n" << (checks - failures) << " / " << checks << " checks passed\n";
     return failures == 0 ? 0 : 1;
 }

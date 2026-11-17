@@ -191,7 +191,7 @@ void WaveformView::paint (Graphics& g)
     String line = info->fileName();
     line << "   " << String (info->sampleRate / 1000.0, 1) << " kHz  " << (info->numChannels > 1 ? "stereo" : "mono");
     if (info->onsetSec > 0.001) line << "   starts at " << String (info->onsetSec * 1000.0, 0) << " ms";
-    if (waiting) line << "   waiting for the next bar...";
+    if (waiting) line << "   waiting for the next beat/bar...";
     g.drawText (line, wave.reduced (8, 4).removeFromTop (14), Justification::topLeft, true);
     if (sampler)
     {
