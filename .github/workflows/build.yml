@@ -51,12 +51,20 @@ jobs:
           codesign --force --deep -s - "$STAGE/vst3/Bash Browser.vst3"
           codesign --force --deep -s - "$STAGE/au/Bash Browser.component"
           codesign --force --deep -s - "$STAGE/app/Bash Browser.app"
-          pkgbuild --root "$STAGE/vst3" --identifier com.kalabash.bashbrowser.vst3 --version 0.1.0 \
+          # The VST3, AU and app share one bundle ID. Component packages are "relocatable" by default,
+          # so the installer would redirect the plugins onto the already-installed app. Turn that off.
+          for part in vst3 au app; do
+            pkgbuild --analyze --root "$STAGE/$part" "$part.plist"
+            /usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$part.plist"
+          done
+          pkgbuild --root "$STAGE/vst3" --component-plist vst3.plist --identifier com.kalabash.bashbrowser.vst3 --version 0.1.1 \
                    --install-location "/Library/Audio/Plug-Ins/VST3" vst3.pkg
-          pkgbuild --root "$STAGE/au" --identifier com.kalabash.bashbrowser.au --version 0.1.0 \
+          pkgbuild --root "$STAGE/au" --component-plist au.plist --identifier com.kalabash.bashbrowser.au --version 0.1.1 \
                    --install-location "/Library/Audio/Plug-Ins/Components" au.pkg
-          pkgbuild --root "$STAGE/app" --identifier com.kalabash.bashbrowser.app --version 0.1.0 \
+          pkgbuild --root "$STAGE/app" --component-plist app.plist --identifier com.kalabash.bashbrowser.app --version 0.1.1 \
                    --install-location "/Applications" app.pkg
+          # check the payloads land in the right folders
+          for p in vst3 au app; do pkgutil --payload-files $p.pkg | head -3; done
           productbuild --package vst3.pkg --package au.pkg --package app.pkg "Bash Browser Installer.pkg"
           mkdir dmg
           cp "Bash Browser Installer.pkg" dmg/
