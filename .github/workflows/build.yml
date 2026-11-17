@@ -1,0 +1,64 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libfreetype-dev libfontconfig1-dev libx11-dev libxrandr-dev \
+            libxinerama-dev libxcursor-dev libxext-dev libgl1-mesa-dev
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DSB_BUILD_PLUGIN=OFF
+      - name: Build tests
+        run: cmake --build build --target AnalyzerTests EngineTests -j4
+      - name: Run analysis tests
+        run: ./build/AnalyzerTests_artefacts/Release/AnalyzerTests
+      - name: Run engine tests
+        run: ./build/EngineTests_artefacts/Release/EngineTests
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (universal)
+        run: cmake -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DSB_BUILD_TESTS=OFF
+      - name: Build
+        run: cmake --build build --config Release --target BashBrowser_VST3 BashBrowser_AU BashBrowser_Standalone -- -quiet
+      - name: Package installer
+        run: |
+          set -e
+          ART="build/BashBrowser_artefacts/Release"
+          ls -R "$ART" | head -50
+          STAGE=pkgroot
+          mkdir -p "$STAGE/vst3" "$STAGE/au" "$STAGE/app"
+          cp -R "$ART/VST3/Bash Browser.vst3" "$STAGE/vst3/"
+          cp -R "$ART/AU/Bash Browser.component" "$STAGE/au/"
+          cp -R "$ART/Standalone/Bash Browser.app" "$STAGE/app/"
+          # ad-hoc sign so Apple Silicon will load the binaries
+          codesign --force --deep -s - "$STAGE/vst3/Bash Browser.vst3"
+          codesign --force --deep -s - "$STAGE/au/Bash Browser.component"
+          codesign --force --deep -s - "$STAGE/app/Bash Browser.app"
+          pkgbuild --root "$STAGE/vst3" --identifier com.kalabash.bashbrowser.vst3 --version 0.1.0 \
+                   --install-location "/Library/Audio/Plug-Ins/VST3" vst3.pkg
+          pkgbuild --root "$STAGE/au" --identifier com.kalabash.bashbrowser.au --version 0.1.0 \
+                   --install-location "/Library/Audio/Plug-Ins/Components" au.pkg
+          pkgbuild --root "$STAGE/app" --identifier com.kalabash.bashbrowser.app --version 0.1.0 \
+                   --install-location "/Applications" app.pkg
+          productbuild --package vst3.pkg --package au.pkg --package app.pkg "Bash Browser Installer.pkg"
+          mkdir dmg
+          cp "Bash Browser Installer.pkg" dmg/
+          cp README.md dmg/"Read Me.md"
+          hdiutil create -volname "Bash Browser" -srcfolder dmg -ov -format UDZO "Bash-Browser-mac.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Bash-Browser-mac
+          path: Bash-Browser-mac.dmg
