@@ -61,7 +61,9 @@ jobs:
           # so the installer would redirect the plugins onto the already-installed app. Turn that off.
           for part in vst3 au app; do
             pkgbuild --analyze --root "$STAGE/$part" "$part.plist"
-            /usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$part.plist"
+            n=$(/usr/libexec/PlistBuddy -c "Print" "$part.plist" | grep -c "BundleIsRelocatable" || true)
+            for ((i=0; i<n; i++)); do /usr/libexec/PlistBuddy -c "Set :$i:BundleIsRelocatable false" "$part.plist"; done
+            echo "$part: $n bundle(s) set non-relocatable"
           done
           pkgbuild --root "$STAGE/vst3" --component-plist vst3.plist --identifier com.kalabash.bashbrowser.vst3 --version 0.1.1 \
                    --install-location "/Library/Audio/Plug-Ins/VST3" vst3.pkg
