@@ -55,11 +55,11 @@ private:
     std::unordered_map<std::string, int> pathIndex;
 
     // header
-    juce::TextButton foldersButton { "Folders" }, rescanButton { "Rescan" }, playButton { "Play" };
+    juce::TextButton foldersButton { "Folders" }, rescanButton { "Rescan" }, playButton { "Preview" };
     juce::Label status, tempoLabel;
     juce::TextEditor search;
     juce::ComboBox warp, sync, dragMode;
-    juce::ToggleButton loopToggle { "Loop" }, autoPlay { "Auto-play" }, loadOnSelect { "To sampler" }, trim { "Skip silence" };
+    juce::TextButton loopToggle { "Loop" }, autoPlay { "Auto-play" }, loadOnSelect { "To sampler" }, trim { "Skip silence" };
     juce::Label warpLabel { {}, "Warp" }, syncLabel { {}, "One-shots" };
 
     FilterPanel filters;
@@ -69,6 +69,7 @@ private:
     SamplerPanel sampler;
     juce::AudioFormatManager formats;
     juce::String lastSamplerPath;
+    juce::Rectangle<int> searchBar;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SampleBrowserEditor)
 };

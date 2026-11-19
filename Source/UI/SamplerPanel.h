@@ -32,7 +32,7 @@ private:
     class Keyboard;
     juce::AudioProcessorValueTreeState& apvts;
     juce::OwnedArray<Knob> knobs;
-    juce::OwnedArray<juce::ToggleButton> toggles;
+    juce::OwnedArray<juce::TextButton> toggles;
     juce::OwnedArray<juce::ComboBox> combos;
     juce::OwnedArray<juce::AudioProcessorValueTreeState::ButtonAttachment> buttonAtt;
     juce::OwnedArray<juce::AudioProcessorValueTreeState::ComboBoxAttachment> comboAtt;

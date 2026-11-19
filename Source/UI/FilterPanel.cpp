@@ -16,25 +16,26 @@ public:
     void paint (Graphics& g) override
     {
         auto r = getLocalBounds().toFloat();
-        if (isMouseOver()) { g.setColour (colours::panelHi); g.fillRoundedRectangle (r, 3); }
+        if (isMouseOver()) { g.setColour (colours::panel); g.fillRect (r); }
         const bool empty = count == 0 && ! ticked;
-        auto box = Rectangle<float> (r.getX() + 4, r.getCentreY() - 6, 12, 12);
-        g.setColour (ticked ? colours::accent : colours::line);
+        auto box = Rectangle<float> (r.getX() + 4, r.getCentreY() - 5.5f, 11, 11);
+        g.setColour (ticked ? colours::accent : colours::field);
+        g.fillRect (box);
+        g.setColour (colours::line);
+        g.drawRect (box, 1.0f);
         if (ticked)
         {
-            g.fillRoundedRectangle (box, 2.5f);
-            Path t; t.startNewSubPath (box.getX() + 2.6f, box.getCentreY());
-            t.lineTo (box.getX() + 5.0f, box.getBottom() - 3.0f); t.lineTo (box.getRight() - 2.4f, box.getY() + 3.0f);
-            g.setColour (Colours::black); g.strokePath (t, PathStrokeType (1.7f));
+            Path t; t.startNewSubPath (box.getX() + 2.4f, box.getCentreY());
+            t.lineTo (box.getX() + 4.6f, box.getBottom() - 2.6f); t.lineTo (box.getRight() - 2.2f, box.getY() + 2.6f);
+            g.setColour (colours::onText); g.strokePath (t, PathStrokeType (1.5f));
         }
-        else g.drawRoundedRectangle (box, 2.5f, 1.2f);
-        g.setFont (FontOptions (12.5f));
-        g.setColour (empty ? colours::textDim.withAlpha (0.6f) : colours::text);
-        auto textR = r.withTrimmedLeft (21).withTrimmedRight (4);
+        g.setFont (liveFont());
+        g.setColour (empty ? colours::textDim : colours::text);
+        auto textR = r.withTrimmedLeft (20).withTrimmedRight (4);
         auto countStr = count > 0 ? String (count) : String();
-        g.drawText (option, textR.withTrimmedRight (countStr.length() * 7.0f + 2), Justification::centredLeft, true);
+        g.drawText (option, textR.withTrimmedRight (countStr.length() * 6.5f + 2), Justification::centredLeft, true);
         g.setColour (colours::textDim);
-        g.setFont (FontOptions (11.0f));
+        g.setFont (liveFont (10.0f));
         g.drawText (countStr, textR, Justification::centredRight, false);
     }
     void mouseUp (const MouseEvent& e) override
@@ -55,17 +56,19 @@ public:
     using Tick::Tick;
     void paint (Graphics& g) override
     {
-        auto r = getLocalBounds().toFloat().reduced (1.5f);
+        auto r = getLocalBounds().toFloat().reduced (0.5f);
         const bool empty = count == 0 && ! ticked;
-        g.setColour (ticked ? colours::accent : (isMouseOver() ? colours::panelHi.brighter (0.1f) : colours::panelHi));
-        g.fillRoundedRectangle (r, 3);
-        g.setColour (ticked ? Colours::black : (empty ? colours::textDim.withAlpha (0.5f) : colours::text));
-        g.setFont (FontOptions (12.0f, Font::bold));
+        g.setColour (ticked ? colours::accent : (isMouseOver() ? colours::panelHi : colours::field));
+        g.fillRect (r);
+        g.setColour (colours::line);
+        g.drawRect (r, 1.0f);
+        g.setColour (ticked ? colours::onText : (empty ? colours::textDim : colours::text));
+        g.setFont (liveFont (11.0f));
         auto label = option.upToFirstOccurrenceOf (" ", false, false);
-        g.drawText (label, r.withTrimmedBottom (r.getHeight() * 0.35f), Justification::centredBottom);
-        g.setFont (FontOptions (9.5f));
-        g.setColour (ticked ? Colours::black.withAlpha (0.7f) : colours::textDim);
-        g.drawText (count > 0 ? String (count) : String ("-"), r.withTrimmedTop (r.getHeight() * 0.62f), Justification::centredTop);
+        g.drawText (label, r.withTrimmedBottom (r.getHeight() * 0.4f), Justification::centredBottom);
+        g.setFont (liveFont (9.0f));
+        g.setColour (ticked ? colours::onText.withAlpha (0.7f) : colours::textDim);
+        g.drawText (count > 0 ? String (count) : String ("-"), r.withTrimmedTop (r.getHeight() * 0.6f), Justification::centredTop);
     }
 };
 
@@ -76,21 +79,22 @@ public:
     void paint (Graphics& g) override
     {
         auto r = getLocalBounds().toFloat();
+        g.setColour (colours::divider);
+        g.fillRect (r.removeFromTop (1));
         g.setColour (colours::textDim);
-        g.setFont (FontOptions (11.5f, Font::bold));
         Path arrow;
-        float ax = 8, ay = r.getCentreY();
-        if (collapsed) arrow.addTriangle (ax - 3, ay - 4, ax - 3, ay + 4, ax + 3, ay);
-        else arrow.addTriangle (ax - 4, ay - 2.5f, ax + 4, ay - 2.5f, ax, ay + 3.5f);
+        const float ax = 8, ay = r.getCentreY();
+        if (collapsed) arrow.addTriangle (ax - 2.5f, ay - 3.5f, ax - 2.5f, ay + 3.5f, ax + 3, ay);
+        else arrow.addTriangle (ax - 3.5f, ay - 2, ax + 3.5f, ay - 2, ax, ay + 3);
         g.fillPath (arrow);
-        g.setColour (ticks > 0 ? colours::accent : colours::text);
-        g.drawText (categoryName (cat).toUpperCase() + (ticks > 0 ? "  (" + String (ticks) + ")" : String()),
+        g.setFont (liveFont());
+        g.setColour (ticks > 0 ? colours::accent : colours::textDim);
+        g.drawText (categoryName (cat) + (ticks > 0 ? "  " + String (ticks) : String()),
                     r.withTrimmedLeft (18), Justification::centredLeft);
         if (ticks > 0)
         {
             g.setColour (colours::textDim);
-            g.setFont (FontOptions (11.0f));
-            g.drawText ("clear", r.withTrimmedRight (4), Justification::centredRight);
+            g.drawText ("Clear", r.withTrimmedRight (6), Justification::centredRight);
         }
     }
     void mouseUp (const MouseEvent& e) override
@@ -175,8 +179,8 @@ public:
             const bool isKey = c == (int) Category::Key;
             const bool emptyDynamic = list.empty();
             h.setVisible (true);
-            h.setBounds (0, y, w, 22);
-            y += 24;
+            h.setBounds (0, y, w, 21);
+            y += 22;
             if (h.collapsed || emptyDynamic)
             {
                 for (auto& t : list) t->setVisible (false);
@@ -199,13 +203,13 @@ public:
                     if (i < 24)
                     {
                         int row = (int) i / 12, col = (int) i % 12;
-                        t->setBounds (4 + col * cell, y + row * 34, cell, 34);
+                        t->setBounds (4 + col * cell, y + row * 30, cell, 30);
                     }
-                    else t->setBounds (4, y + 70, w / 2 - 6, 20);
+                    else t->setBounds (4, y + 62, w / 2 - 6, 19);
                 }
                 compatible.setVisible (true);
-                compatible.setBounds (w / 2, y + 70, w / 2 - 4, 20);
-                y += 70 + 24;
+                compatible.setBounds (w / 2, y + 62, w / 2 - 4, 19);
+                y += 62 + 24;
             }
             else
             {
@@ -216,11 +220,11 @@ public:
                 {
                     t->setVisible (true);
                     int col = twoCol ? i % 2 : 0, row = twoCol ? i / 2 : i;
-                    t->setBounds (4 + col * colW, y + row * 21, colW, 21);
+                    t->setBounds (4 + col * colW, y + row * 19, colW, 19);
                     ++i;
                 }
                 int rows = twoCol ? (i + 1) / 2 : i;
-                y += rows * 21 + 6;
+                y += rows * 19 + 6;
             }
         }
         setSize (w, y + 8);
@@ -245,7 +249,7 @@ FilterPanel::FilterPanel()
     addAndMakeVisible (favourites);
     addAndMakeVisible (countLabel);
     countLabel.setColour (Label::textColourId, colours::textDim);
-    countLabel.setFont (FontOptions (11.5f));
+    countLabel.setFont (liveFont (10.5f));
     clearAll.onClick = [this] { if (onClearAll) onClearAll(); };
     favourites.onClick = [this] { if (onFavouritesToggled) onFavouritesToggled(); };
 }
@@ -274,6 +278,8 @@ void FilterPanel::resized()
 
 void FilterPanel::paint (Graphics& g)
 {
-    g.fillAll (colours::panel);
+    g.fillAll (colours::area);
+    g.setColour (colours::panel);
+    g.fillRect (getLocalBounds().removeFromTop (46));
 }
 }

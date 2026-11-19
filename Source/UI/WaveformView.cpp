@@ -48,7 +48,7 @@ void WaveformView::timerCallback()
 void WaveformView::resized()
 {
     auto r = getLocalBounds().reduced (6, 4);
-    dragHandle = r.removeFromRight (78).withSizeKeepingCentre (72, juce::jmin (52, r.getHeight() - 8));
+    dragHandle = r.removeFromRight (90).withSizeKeepingCentre (84, juce::jmin (64, r.getHeight() - 4));
     r.removeFromRight (6);
     wave = r;
 }
@@ -103,28 +103,46 @@ WaveformView::Marker WaveformView::markerAt (float x) const
 
 void WaveformView::paint (Graphics& g)
 {
-    g.fillAll (colours::bg);
-    g.setColour (colours::panel);
-    g.fillRoundedRectangle (wave.toFloat(), 4);
+    g.fillAll (colours::panel);
+    g.setColour (colours::display);
+    g.fillRect (wave);
+    g.setColour (colours::line);
+    g.drawRect (wave);
 
-    // drag handle
+    // drag handle, drawn like a Live clip so it reads as "drag this into the set"
     {
         auto h = dragHandle.toFloat();
-        g.setColour (info ? colours::accent.withAlpha (0.9f) : colours::line);
-        g.fillRoundedRectangle (h, 5);
-        g.setColour (Colours::black);
-        Path arrow;
-        auto c = h.getCentre().translated (0, -7);
-        arrow.addArrow ({ c.x, c.y - 8, c.x, c.y + 8 }, 3.0f, 10.0f, 7.0f);
-        g.fillPath (arrow);
-        g.setFont (FontOptions (11.0f, Font::bold));
-        g.drawText ("DRAG TO LIVE", h.withTrimmedTop (h.getHeight() * 0.6f), Justification::centred);
+        g.setColour (colours::field);
+        g.fillRect (h);
+        g.setColour (colours::line);
+        g.drawRect (h, 1.0f);
+        auto clip = h.reduced (5, 6).withTrimmedBottom (14);
+        g.setColour (info ? colours::clipBlue : colours::panelHi);
+        g.fillRect (clip);
+        auto title = clip.removeFromTop (11);
+        g.setColour (info ? colours::clipBlue.darker (0.25f) : colours::panelHi);
+        g.fillRect (title);
+        if (info)
+        {
+            g.setColour (colours::onText);
+            g.setFont (liveFont (9.0f));
+            g.drawText (info->fileName(), title.reduced (2, 0), Justification::centredLeft, true);
+            // mini waveform inside the clip
+            if (thumb.getTotalLength() > 0)
+            {
+                g.setColour (colours::onText.withAlpha (0.8f));
+                thumb.drawChannel (g, clip.reduced (1, 2).toNearestInt(), 0.0, thumb.getTotalLength(), 0, 0.9f);
+            }
+        }
+        g.setColour (info ? colours::text : colours::textDim);
+        g.setFont (liveFont (10.0f));
+        g.drawText ("Drag to Live", h.removeFromBottom (16), Justification::centred);
     }
 
     if (! info)
     {
         g.setColour (colours::textDim);
-        g.setFont (FontOptions (13.0f));
+        g.setFont (liveFont());
         g.drawText ("Select a sound", wave, Justification::centred);
         return;
     }
@@ -140,7 +158,7 @@ void WaveformView::paint (Graphics& g)
     auto inner = wave.reduced (0, 4);
     if (thumb.getTotalLength() > 0)
     {
-        g.setColour (colours::wave.withAlpha (0.35f));
+        g.setColour (colours::panelHi);
         thumb.drawChannels (g, inner, 0.0, thumb.getTotalLength(), 0.95f);
         g.saveState();
         g.reduceClipRegion (Rectangle<int> ((int) xForSec (start), inner.getY(), (int) (xForSec (end) - xForSec (start)) + 1, inner.getHeight()));
@@ -150,7 +168,7 @@ void WaveformView::paint (Graphics& g)
     }
 
     // auto start (detected onset)
-    g.setColour (colours::good.withAlpha (0.7f));
+    g.setColour (colours::keyZone.withAlpha (0.8f));
     float ox = xForSec (info->onsetSec);
     g.drawVerticalLine ((int) ox, (float) wave.getY(), (float) wave.getBottom());
 
@@ -164,29 +182,29 @@ void WaveformView::paint (Graphics& g)
             if (flagRight) flag.addTriangle (x, (float) wave.getY(), x + 8, (float) wave.getY(), x, (float) wave.getY() + 8);
             else flag.addTriangle (x, (float) wave.getY(), x - 8, (float) wave.getY(), x, (float) wave.getY() + 8);
             g.fillPath (flag);
-            g.setFont (FontOptions (10.0f, Font::bold));
+            g.setFont (liveFont (9.5f));
             g.drawText (label, Rectangle<float> (flagRight ? x + 3 : x - 43, (float) wave.getBottom() - 14, 40, 12),
                         flagRight ? Justification::left : Justification::right);
         };
         if (loopOn)
         {
             const double ls = start + apvts.getRawParameterValue (pid::loopStart)->load() * (end - start);
-            g.setColour (colours::accent.withAlpha (0.12f));
+            g.setColour (colours::accent2.withAlpha (0.10f));
             g.fillRect (Rectangle<float> (xForSec (ls), (float) wave.getY(), xForSec (end) - xForSec (ls), (float) wave.getHeight()));
-            marker (ls, colours::accent.withAlpha (0.8f), "LOOP", true);
+            marker (ls, colours::accent2, "Loop", true);
         }
         marker (start, colours::accent, "S", true);
         marker (end, colours::accent, "E", false);
     }
 
     // playheads
-    g.setColour (colours::accent2);
+    g.setColour (colours::text);
     if (previewPos >= 0) g.fillRect (xForSec (previewPos) - 1, (float) wave.getY(), 2.0f, (float) wave.getHeight());
     g.setColour (colours::good);
     for (auto v : voicePos) g.fillRect (xForSec (v) - 0.5f, (float) wave.getY(), 1.5f, (float) wave.getHeight());
 
     // info line
-    g.setFont (FontOptions (11.5f));
+    g.setFont (liveFont (10.5f));
     g.setColour (colours::textDim);
     String line = info->fileName();
     line << "   " << String (info->sampleRate / 1000.0, 1) << " kHz  " << (info->numChannels > 1 ? "stereo" : "mono");
@@ -195,8 +213,8 @@ void WaveformView::paint (Graphics& g)
     g.drawText (line, wave.reduced (8, 4).removeFromTop (14), Justification::topLeft, true);
     if (sampler)
     {
-        g.setColour (colours::good);
-        g.drawText ("IN SAMPLER", wave.reduced (8, 4).removeFromTop (14), Justification::topRight, false);
+        g.setColour (colours::keyZone);
+        g.drawText ("In sampler", wave.reduced (8, 4).removeFromTop (14), Justification::topRight, false);
     }
 }
 

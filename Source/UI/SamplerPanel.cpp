@@ -18,8 +18,8 @@ public:
         name.setText (label, dontSendNotification);
         value.setJustificationType (Justification::centred);
         name.setJustificationType (Justification::centred);
-        name.setFont (FontOptions (11.0f));
-        value.setFont (FontOptions (10.5f));
+        name.setFont (liveFont());
+        value.setFont (liveFont (10.5f));
         name.setColour (Label::textColourId, colours::text);
         value.setColour (Label::textColourId, colours::textDim);
         for (auto* l : { &name, &value }) { l->setInterceptsMouseClicks (false, false); l->setMinimumHorizontalScale (0.7f); addAndMakeVisible (*l); }
@@ -42,7 +42,8 @@ public:
         auto r = getLocalBounds();
         name.setBounds (r.removeFromTop (12));
         value.setBounds (r.removeFromBottom (12));
-        slider.setBounds (r);
+        const int d = juce::jmin (r.getWidth(), r.getHeight(), 36);
+        slider.setBounds (r.withSizeKeepingCentre (d, d));
     }
     Slider slider;
     Label name, value;
@@ -55,11 +56,12 @@ class SamplerPanel::Keyboard : public MidiKeyboardComponent
 public:
     Keyboard (MidiKeyboardState& s) : MidiKeyboardComponent (s, horizontalKeyboard)
     {
-        setColour (whiteNoteColourId, Colour (0xffe6e6e6));
-        setColour (blackNoteColourId, Colour (0xff222222));
-        setColour (keySeparatorLineColourId, Colour (0xff8a8a8a));
+        setColour (whiteNoteColourId, colours::pianoWhite);
+        setColour (blackNoteColourId, colours::pianoBlack);
+        setColour (keySeparatorLineColourId, colours::pianoBlack);
         setColour (keyDownOverlayColourId, colours::accent);
-        setColour (mouseOverKeyOverlayColourId, colours::accent.withAlpha (0.3f));
+        setColour (mouseOverKeyOverlayColourId, colours::text.withAlpha (0.25f));
+        setColour (textLabelColourId, colours::onText.withAlpha (0.6f));
         setColour (shadowColourId, Colours::transparentBlack);
         setOctaveForMiddleC (3); // Ableton naming: C3 = 60
         setKeyWidth (14.0f);
@@ -69,12 +71,12 @@ public:
     void drawWhiteNote (int note, Graphics& g, Rectangle<float> area, bool down, bool over, Colour line, Colour text) override
     {
         MidiKeyboardComponent::drawWhiteNote (note, g, area, down, over, line, text);
-        if (note == root) { g.setColour (colours::good); g.fillRect (area.removeFromBottom (6).reduced (2, 0)); }
+        if (note == root) { g.setColour (colours::keyZone); g.fillRect (area.removeFromBottom (6).reduced (2, 0)); }
     }
     void drawBlackNote (int note, Graphics& g, Rectangle<float> area, bool down, bool over, Colour fill) override
     {
         MidiKeyboardComponent::drawBlackNote (note, g, area, down, over, fill);
-        if (note == root) { g.setColour (colours::good); g.fillRect (area.removeFromBottom (5).reduced (2, 0)); }
+        if (note == root) { g.setColour (colours::keyZone); g.fillRect (area.removeFromBottom (5).reduced (2, 0)); }
     }
 };
 
@@ -86,7 +88,8 @@ SamplerPanel::SamplerPanel (AudioProcessorValueTreeState& s, MidiKeyboardState& 
         return k;
     };
     auto toggle = [&] (const char* id, const String& label) {
-        auto* t = toggles.add (new ToggleButton (label));
+        auto* t = toggles.add (new TextButton (label));
+        t->setClickingTogglesState (true);
         addAndMakeVisible (t);
         buttonAtt.add (new AudioProcessorValueTreeState::ButtonAttachment (s, id, *t));
         return t;
@@ -102,7 +105,7 @@ SamplerPanel::SamplerPanel (AudioProcessorValueTreeState& s, MidiKeyboardState& 
 
     auto add = [] (Group& g, Component* c, int span = 1) { g.controls.add (c); g.spans.add (span); };
 
-    Group sample { "SAMPLE" };
+    Group sample { "Sample" };
     sample.columns = 4;
     add (sample, combo (pid::mode), 2);
     add (sample, toggle (pid::autoStart, "Auto start"), 2);
@@ -119,12 +122,12 @@ SamplerPanel::SamplerPanel (AudioProcessorValueTreeState& s, MidiKeyboardState& 
     for (auto* c : std::initializer_list<Component*> { loopT, loopPos, loopFade }) classicOnly.add (c);
     for (auto* c : std::initializer_list<Component*> { gate, fadeIn, fadeOut }) oneShotOnly.add (c);
 
-    Group pitch { "PITCH" };
+    Group pitch { "Pitch" };
     pitch.columns = 2;
     add (pitch, knob (pid::transpose, "Transpose")); add (pitch, knob (pid::detune, "Detune"));
     add (pitch, knob (pid::glide, "Glide")); add (pitch, knob (pid::voices, "Voices"));
 
-    Group amp { "AMP ENVELOPE" };
+    Group amp { "Amplitude" };
     amp.columns = 4;
     auto* a = knob (pid::attack, "Attack"); auto* d = knob (pid::decay, "Decay");
     auto* su = knob (pid::sustain, "Sustain"); auto* re = knob (pid::release, "Release");
@@ -133,7 +136,7 @@ SamplerPanel::SamplerPanel (AudioProcessorValueTreeState& s, MidiKeyboardState& 
     add (amp, knob (pid::pan, "Pan")); add (amp, knob (pid::previewVol, "Preview"));
     for (auto* c : std::initializer_list<Component*> { a, d, su }) classicOnly.add (c);
 
-    Group filter { "FILTER" };
+    Group filter { "Filter" };
     filter.columns = 4;
     add (filter, toggle (pid::filterOn, "On")); add (filter, combo (pid::filterType));
     add (filter, knob (pid::cutoff, "Freq")); add (filter, knob (pid::reso, "Res"));
@@ -154,9 +157,9 @@ SamplerPanel::SamplerPanel (AudioProcessorValueTreeState& s, MidiKeyboardState& 
 
     keyboard = std::make_unique<Keyboard> (keys);
     addAndMakeVisible (*keyboard);
-    sampleName.setFont (FontOptions (11.5f));
-    sampleName.setColour (Label::textColourId, colours::good);
-    sampleName.setJustificationType (Justification::centredRight);
+    sampleName.setFont (liveFont());
+    sampleName.setColour (Label::textColourId, colours::text);
+    sampleName.setJustificationType (Justification::centredLeft);
     addAndMakeVisible (sampleName);
     startTimerHz (10);
 }
@@ -171,7 +174,7 @@ void SamplerPanel::setRootNote (float midi)
 
 void SamplerPanel::setSampleName (const String& n)
 {
-    sampleName.setText (n.isEmpty() ? String ("Sampler empty: select a sound") : "Sampler: " + n, dontSendNotification);
+    sampleName.setText (n.isEmpty() ? String ("Empty: select a sound") : n, dontSendNotification);
 }
 
 void SamplerPanel::timerCallback()
@@ -186,29 +189,43 @@ void SamplerPanel::timerCallback()
 
 void SamplerPanel::paint (Graphics& g)
 {
-    g.fillAll (colours::panel);
-    g.setColour (colours::line);
-    g.drawHorizontalLine (0, 0, (float) getWidth());
-    for (auto& gr : groups)
+    // drawn like a Live device: title bar with an activator, then the controls on the device body
+    g.fillAll (colours::bg);
+    auto body = getLocalBounds().reduced (3, 3);
+    g.setColour (colours::panel);
+    g.fillRect (body);
+    auto title = body.removeFromTop (19);
+    g.setColour (colours::panelHi);
+    g.fillRect (title);
+    auto act = title.removeFromLeft (19).toFloat().reduced (5);
+    g.setColour (colours::accent);
+    g.fillEllipse (act);
+    g.setColour (colours::text);
+    g.setFont (liveFont (11.0f, true));
+    g.drawText ("Bash Sampler", title.withTrimmedLeft (2), Justification::centredLeft);
+
+    for (size_t i = 0; i < groups.size(); ++i)
     {
-        g.setColour (colours::bg.withAlpha (0.5f));
-        g.fillRoundedRectangle (gr.area.toFloat(), 4);
+        auto& gr = groups[i];
         g.setColour (colours::textDim);
-        g.setFont (FontOptions (11.0f, Font::bold));
-        g.drawText (gr.name, gr.area.reduced (8, 3).removeFromTop (14), Justification::topLeft);
+        g.setFont (liveFont());
+        g.drawText (gr.name, gr.area.reduced (6, 2).removeFromTop (13), Justification::topLeft);
+        if (i > 0)
+        {
+            g.setColour (colours::divider);
+            g.fillRect (gr.area.getX() - 4, gr.area.getY() + 2, 1, gr.area.getHeight() - 4);
+        }
     }
-    g.setColour (colours::textDim);
-    g.setFont (FontOptions (11.0f, Font::bold));
-    g.drawText ("SAMPLER", getLocalBounds().reduced (8, 4).removeFromBottom (keyboard->getHeight() + 20).removeFromTop (16),
-                Justification::left);
 }
 
 void SamplerPanel::resized()
 {
-    auto r = getLocalBounds().reduced (6, 6);
-    auto kb = r.removeFromBottom (58);
-    auto kbHeader = r.removeFromBottom (18);
-    sampleName.setBounds (kbHeader.withTrimmedLeft (80));
+    auto r = getLocalBounds().reduced (3, 3);
+    auto title = r.removeFromTop (19);
+    sampleName.setBounds (title.withTrimmedLeft (110).withTrimmedRight (6));
+    r.reduce (4, 4);
+    auto kb = r.removeFromBottom (54);
+    r.removeFromBottom (4);
     keyboard->setBounds (kb);
     // fit roughly 7 octaves; widen keys if there's room
     keyboard->setKeyWidth (jmax (10.0f, kb.getWidth() / 52.0f));
@@ -222,7 +239,7 @@ void SamplerPanel::resized()
     for (auto& g : groups)
     {
         g.area = Rectangle<int> (x, r.getY(), colW * g.columns, r.getHeight());
-        auto inner = g.area.reduced (4, 4).withTrimmedTop (14);
+        auto inner = g.area.reduced (2, 2).withTrimmedTop (14);
         int rows = 1, col = 0;
         for (int i = 0; i < g.controls.size(); ++i)
         {
@@ -239,8 +256,8 @@ void SamplerPanel::resized()
             if (col + span > g.columns) { ++row; col = 0; }
             auto cell = Rectangle<int> (inner.getX() + col * colW, inner.getY() + row * rowH, colW * span, rowH).reduced (2);
             col += span;
-            if (dynamic_cast<ComboBox*> (c) != nullptr || dynamic_cast<ToggleButton*> (c) != nullptr)
-                c->setBounds (cell.withSizeKeepingCentre (cell.getWidth(), 22));
+            if (dynamic_cast<ComboBox*> (c) != nullptr || dynamic_cast<Button*> (c) != nullptr)
+                c->setBounds (cell.withSizeKeepingCentre (cell.getWidth(), 18));
             else
                 c->setBounds (cell);
         }

@@ -7,21 +7,21 @@ using namespace juce;
 
 TagEditor::TagEditor()
 {
-    title.setFont (FontOptions (15.0f, Font::bold));
+    title.setFont (liveFont (12.5f, true));
     title.setColour (Label::textColourId, colours::text);
-    pathLabel.setFont (FontOptions (11.0f));
+    pathLabel.setFont (liveFont());
     pathLabel.setColour (Label::textColourId, colours::textDim);
     pathLabel.setMinimumHorizontalScale (0.6f);
-    details.setFont (FontOptions (11.5f));
+    details.setFont (liveFont());
     details.setColour (Label::textColourId, colours::textDim);
     details.setJustificationType (Justification::topLeft);
-    character.setFont (FontOptions (11.5f));
+    character.setFont (liveFont());
     character.setColour (Label::textColourId, colours::text);
     character.setJustificationType (Justification::topLeft);
     for (auto* l : { &title, &pathLabel, &details, &character }) addAndMakeVisible (*l);
     for (auto* l : { &instLabel, &keyLabel, &bpmLabel, &typeLabel, &rootLabel, &styleLabel, &tagsLabel })
     {
-        l->setFont (FontOptions (11.5f));
+        l->setFont (liveFont());
         l->setColour (Label::textColourId, colours::textDim);
         addAndMakeVisible (*l);
     }
@@ -52,6 +52,7 @@ TagEditor::TagEditor()
     keyMode.onChange = keyChanged;
 
     addAndMakeVisible (bpm);
+    for (auto* t : { &bpm, &styles, &tags }) { t->setFont (liveFont (11.5f)); t->setIndents (4, 2); }
     bpm.setInputRestrictions (7, "0123456789.");
     bpm.setJustification (Justification::centredLeft);
     bpm.onReturnKey = [this] { commitBpm(); };
@@ -68,8 +69,7 @@ TagEditor::TagEditor()
     addAndMakeVisible (root);
     root.setSliderStyle (Slider::LinearBar);
     root.setRange (0.0, 127.0, 0.01);
-    root.setColour (Slider::trackColourId, colours::panelHi);
-    root.setColour (Slider::backgroundColourId, colours::bg);
+    root.setColour (Slider::textBoxTextColourId, colours::text);
     root.textFromValueFunction = [] (double v) {
         int n = (int) std::round (v);
         int ct = (int) std::round ((v - n) * 100);
@@ -188,20 +188,18 @@ void TagEditor::setSample (const SampleInfo* s)
 void TagEditor::paint (Graphics& g)
 {
     g.fillAll (colours::panel);
-    g.setColour (colours::line);
-    g.drawVerticalLine (0, 0, (float) getHeight());
 }
 
 void TagEditor::resized()
 {
     auto r = getLocalBounds().reduced (10, 8);
-    title.setBounds (r.removeFromTop (22));
+    title.setBounds (r.removeFromTop (18));
     pathLabel.setBounds (r.removeFromTop (16));
     r.removeFromTop (4);
-    favourite.setBounds (r.removeFromTop (22));
+    favourite.setBounds (r.removeFromTop (19));
     r.removeFromTop (4);
 
-    auto row = [&] (Label& l) { auto line = r.removeFromTop (24); l.setBounds (line.removeFromLeft (84)); r.removeFromTop (4); return line; };
+    auto row = [&] (Label& l) { auto line = r.removeFromTop (19); l.setBounds (line.removeFromLeft (80)); r.removeFromTop (4); return line; };
     instrument.setBounds (row (instLabel));
     {
         auto line = row (keyLabel);
@@ -232,12 +230,12 @@ void TagEditor::resized()
     character.setBounds (r.removeFromTop (32));
     details.setBounds (r.removeFromTop (70));
     r.removeFromTop (4);
-    auto b1 = r.removeFromTop (24);
+    auto b1 = r.removeFromTop (19);
     loadSampler.setBounds (b1.removeFromLeft (b1.getWidth() / 2 - 2));
     b1.removeFromLeft (4);
     reveal.setBounds (b1);
     r.removeFromTop (4);
-    auto b2 = r.removeFromTop (24);
+    auto b2 = r.removeFromTop (19);
     resetAll.setBounds (b2.removeFromLeft (b2.getWidth() / 2 - 2));
     b2.removeFromLeft (4);
     reanalyse.setBounds (b2);

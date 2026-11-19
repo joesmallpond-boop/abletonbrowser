@@ -26,10 +26,10 @@ ResultsTable::ResultsTable()
     h.addColumn ("Project / source", colProject, 150, 60, 600);
     h.setSortColumnId (colName, true);
     h.setStretchToFitActive (false);
-    table.setRowHeight (22);
-    table.setHeaderHeight (24);
+    table.setRowHeight (18);
+    table.setHeaderHeight (19);
     table.setMultipleSelectionEnabled (false);
-    table.setColour (ListBox::backgroundColourId, colours::panel);
+    table.setColour (ListBox::backgroundColourId, colours::area);
     table.setColour (ListBox::outlineColourId, colours::line);
     table.setOutlineThickness (0);
     table.setWantsKeyboardFocus (true);
@@ -97,30 +97,33 @@ void ResultsTable::moveSelection (int delta)
 void ResultsTable::paintRowBackground (Graphics& g, int row, int w, int h, bool selected)
 {
     auto* s = infoForRow (row);
-    if (selected) g.fillAll (colours::accent.withAlpha (0.28f));
-    else if (row % 2) g.fillAll (colours::panelHi.withAlpha (0.35f));
+    if (selected) g.fillAll (table.hasKeyboardFocus (true) ? colours::selection : colours::selectionStandby);
     if (s != nullptr && s->path == playingPath)
     {
-        g.setColour (colours::accent2);
+        // Live's pre-listen blue marks the sound being previewed
+        g.setColour (colours::prelisten);
         g.fillRect (0, 0, 3, h);
     }
     ignoreUnused (w);
 }
 
-void ResultsTable::paintCell (Graphics& g, int row, int col, int w, int h, bool)
+void ResultsTable::paintCell (Graphics& g, int row, int col, int w, int h, bool selected)
 {
     auto* s = infoForRow (row);
     if (s == nullptr) return;
     auto r = Rectangle<int> (4, 0, w - 8, h);
-    g.setFont (FontOptions (12.5f));
-    g.setColour (colours::text);
+    g.setFont (liveFont());
+    const Colour normal = selected ? colours::onText : colours::text;
+    const Colour dim = selected ? colours::onText.withAlpha (0.65f) : colours::textDim;
+    const Colour edited = selected ? colours::onText : colours::accent;
+    g.setColour (normal);
     switch (col)
     {
         case colFav:
         {
             Path star;
-            star.addStar ({ w * 0.5f, h * 0.5f }, 5, 3.0f, 7.0f, 0);
-            g.setColour (s->favourite ? colours::accent : colours::line);
+            star.addStar ({ w * 0.5f, h * 0.5f }, 5, 2.6f, 6.0f, 0);
+            g.setColour (s->favourite ? (selected ? colours::onText : colours::accent) : (selected ? dim : colours::panelHi.brighter (0.1f)));
             if (s->favourite) g.fillPath (star); else g.strokePath (star, PathStrokeType (1.0f));
             break;
         }
@@ -128,39 +131,39 @@ void ResultsTable::paintCell (Graphics& g, int row, int col, int w, int h, bool)
         {
             if (s->path == samplerPath)
             {
-                g.setColour (colours::good);
-                g.fillEllipse ((float) r.getX(), h * 0.5f - 3, 6, 6);
+                g.setColour (selected ? colours::onText : colours::keyZone);
+                g.fillRect ((float) r.getX(), h * 0.5f - 3, 6.0f, 6.0f);
                 r.removeFromLeft (10);
-                g.setColour (colours::text);
+                g.setColour (normal);
             }
             g.drawText (s->fileName(), r, Justification::centredLeft, true);
             break;
         }
         case colInstrument:
-            g.setColour (s->userInstrument >= 0 ? colours::accent : colours::text);
+            g.setColour (s->userInstrument >= 0 ? edited : normal);
             g.drawText (instrumentName (s->instrument()), r, Justification::centredLeft, true);
             break;
         case colKey:
-            g.setColour (s->userKeyRoot != -2 ? colours::accent : (s->keyRoot() < 0 ? colours::textDim : colours::text));
+            g.setColour (s->userKeyRoot != -2 ? edited : (s->keyRoot() < 0 ? dim : normal));
             g.drawText (s->keyDisplay(), r, Justification::centredLeft, true);
             break;
         case colBpm:
-            g.setColour (s->userBpm >= 0 ? colours::accent : colours::text);
+            g.setColour (s->userBpm >= 0 ? edited : normal);
             g.drawText (s->bpm() > 0 ? String (s->bpm(), s->bpm() == std::floor (s->bpm()) ? 0 : 1) : String ("-"), r, Justification::centredLeft, true);
             break;
         case colType:
             g.drawText (s->type() == SoundType::Loop ? "Loop" : "One-shot", r, Justification::centredLeft, true);
             break;
         case colLength:
-            g.setColour (colours::textDim);
+            g.setColour (dim);
             g.drawText (lengthText (s->effectiveLength()), r, Justification::centredLeft, true);
             break;
         case colContent:
-            g.setColour (colours::textDim);
+            g.setColour (dim);
             g.drawText (tonalityName (s->tonality), r, Justification::centredLeft, true);
             break;
         case colProject:
-            g.setColour (colours::textDim);
+            g.setColour (dim);
             g.drawText (s->project, r, Justification::centredLeft, true);
             break;
         default: break;

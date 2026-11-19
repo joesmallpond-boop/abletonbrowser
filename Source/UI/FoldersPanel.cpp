@@ -9,12 +9,12 @@ FoldersPanel::FoldersPanel (Library& lib) : library (lib)
 {
     help.setText ("Pick the folders to sort: your Ableton projects folder, sample libraries, an external SSD... "
                   "Everything inside them is analysed, including each project's Samples folder.", dontSendNotification);
-    help.setFont (FontOptions (12.0f));
+    help.setFont (liveFont());
     help.setColour (Label::textColourId, colours::textDim);
     help.setJustificationType (Justification::topLeft);
     addAndMakeVisible (help);
     list.setRowHeight (24);
-    list.setColour (ListBox::backgroundColourId, colours::bg);
+    list.setColour (ListBox::backgroundColourId, colours::area);
     addAndMakeVisible (list);
     for (auto* b : { &add, &remove, &rescanAll, &ableton }) addAndMakeVisible (*b);
     addAndMakeVisible (autoRescan);
@@ -57,13 +57,13 @@ void FoldersPanel::refresh()
 
 void FoldersPanel::paintListBoxItem (int row, Graphics& g, int w, int h, bool selected)
 {
-    if (selected) g.fillAll (colours::accent.withAlpha (0.3f));
+    if (selected) g.fillAll (colours::selection);
     File f (locations[row]);
-    g.setColour (f.isDirectory() ? colours::text : colours::textDim);
-    g.setFont (FontOptions (12.5f));
+    g.setColour (selected ? colours::onText : f.isDirectory() ? colours::text : colours::textDim);
+    g.setFont (liveFont());
     g.drawText (f.getFileName() + (f.isDirectory() ? String() : String ("  (offline)")), 8, 0, w / 2, h, Justification::centredLeft, true);
     g.setColour (colours::textDim);
-    g.setFont (FontOptions (11.0f));
+    g.setFont (liveFont());
     g.drawText (f.getParentDirectory().getFullPathName(), w / 2, 0, w / 2 - 8, h, Justification::centredRight, true);
 }
 

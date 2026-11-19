@@ -18,16 +18,24 @@ SampleBrowserEditor::SampleBrowserEditor (SampleBrowserProcessor& p)
                                                        &warp, &sync, &dragMode, &loopToggle, &autoPlay, &loadOnSelect, &trim,
                                                        &warpLabel, &syncLabel })
         addAndMakeVisible (c);
-    status.setFont (FontOptions (11.5f));
+    status.setFont (liveFont());
     status.setColour (Label::textColourId, colours::textDim);
-    tempoLabel.setFont (FontOptions (12.0f, Font::bold));
-    tempoLabel.setJustificationType (Justification::centredRight);
+    tempoLabel.setFont (liveFont());
+    tempoLabel.setJustificationType (Justification::centred);
+    tempoLabel.setColour (Label::backgroundColourId, colours::field);
+    tempoLabel.setColour (Label::outlineColourId, colours::line);
+    tempoLabel.setTooltip ("Live's tempo (green while Live is playing)");
+    for (auto* b : { &loopToggle, &autoPlay, &loadOnSelect, &trim }) b->setClickingTogglesState (true);
+    playButton.setColour (TextButton::buttonOnColourId, colours::prelisten);
+    playButton.setColour (TextButton::textColourOnId, colours::text);
     for (auto* l : { &warpLabel, &syncLabel })
     {
-        l->setFont (FontOptions (11.5f));
+        l->setFont (liveFont());
         l->setColour (Label::textColourId, colours::textDim);
         l->setJustificationType (Justification::centredRight);
     }
+    search.setFont (liveFont (11.5f));
+    search.setIndents (6, 3);
     search.setTextToShowWhenEmpty ("Search names, folders, tags...", colours::textDim);
     search.onTextChange = [this] { proc.filterState.search = search.getText(); applyFilters(); };
     search.onEscapeKey = [this] { search.clear(); proc.filterState.search.clear(); applyFilters(); table.getTable().grabKeyboardFocus(); };
@@ -300,7 +308,7 @@ void SampleBrowserEditor::timerCallback()
     auto& preview = proc.getPreview();
     const auto playingPath = preview.isArmed() ? preview.currentPath() : String();
     table.setPlayingPath (playingPath);
-    playButton.setButtonText (playingPath.isNotEmpty() ? "Stop" : "Play");
+    playButton.setButtonText ("Preview");
     playButton.setToggleState (playingPath.isNotEmpty(), dontSendNotification);
 
     Array<double> voices;
@@ -331,9 +339,9 @@ void SampleBrowserEditor::timerCallback()
     status.setText (st, dontSendNotification);
 
     const double bpm = proc.getHostBpm();
-    tempoLabel.setText (String (bpm, 2).trimCharactersAtEnd ("0").trimCharactersAtEnd (".") + " BPM" + (proc.isHostPlaying() ? "  >" : ""),
+    tempoLabel.setText (String (bpm, 2),
                         dontSendNotification);
-    tempoLabel.setColour (Label::textColourId, proc.isHostPlaying() ? colours::good : colours::textDim);
+    tempoLabel.setColour (Label::textColourId, proc.isHostPlaying() ? colours::good : colours::text);
 
     // "Fits project tempo" depends on the live tempo
     if (std::abs (bpm - modelBpm) > 0.01 && ! proc.filterState.ticked[(size_t) Category::Tempo].empty())
@@ -344,46 +352,55 @@ void SampleBrowserEditor::timerCallback()
 void SampleBrowserEditor::paint (Graphics& g)
 {
     g.fillAll (colours::bg);
-    auto header = getLocalBounds().removeFromTop (44);
+    auto header = getLocalBounds().removeFromTop (30);
     g.setColour (colours::panel);
     g.fillRect (header);
-    g.setColour (colours::line);
-    g.drawHorizontalLine (header.getBottom() - 1, 0, (float) getWidth());
-    g.setColour (colours::accent);
-    g.setFont (FontOptions (17.0f, Font::bold));
-    g.drawText ("BASH BROWSER", 12, 0, 150, 28, Justification::bottomLeft);
+    g.setColour (colours::text);
+    g.setFont (liveFont (11.5f, true));
+    g.drawText ("Bash Browser", 10, 0, 90, header.getHeight(), Justification::centredLeft);
     g.setColour (colours::textDim);
-    g.setFont (FontOptions (10.0f));
-    g.drawText ("by Kalabash", 12, 28, 150, 12, Justification::topLeft);
+    g.setFont (liveFont (10.0f));
+    g.drawText ("Kalabash", 94, 0, 60, header.getHeight(), Justification::centredLeft);
+    g.setColour (colours::panel);
+    g.fillRect (searchBar);
 }
 
 void SampleBrowserEditor::resized()
 {
     auto r = getLocalBounds();
-    auto header = r.removeFromTop (44).reduced (8, 9);
+    auto header = r.removeFromTop (30).reduced (6, 6);
     header.removeFromLeft (150);
-    foldersButton.setBounds (header.removeFromLeft (70)); header.removeFromLeft (4);
-    rescanButton.setBounds (header.removeFromLeft (64)); header.removeFromLeft (8);
-    tempoLabel.setBounds (header.removeFromRight (96));
-    header.removeFromRight (6);
-    dragMode.setBounds (header.removeFromRight (190)); header.removeFromRight (8);
-    trim.setBounds (header.removeFromRight (96));
-    loadOnSelect.setBounds (header.removeFromRight (88));
-    autoPlay.setBounds (header.removeFromRight (82));
-    loopToggle.setBounds (header.removeFromRight (56)); header.removeFromRight (4);
-    sync.setBounds (header.removeFromRight (104));
-    syncLabel.setBounds (header.removeFromRight (62));
-    warp.setBounds (header.removeFromRight (92));
-    warpLabel.setBounds (header.removeFromRight (40)); header.removeFromRight (4);
+    foldersButton.setBounds (header.removeFromLeft (60)); header.removeFromLeft (3);
+    rescanButton.setBounds (header.removeFromLeft (56)); header.removeFromLeft (10);
+    tempoLabel.setBounds (header.removeFromRight (62));
+    header.removeFromRight (8);
+    dragMode.setBounds (header.removeFromRight (176)); header.removeFromRight (8);
+    trim.setBounds (header.removeFromRight (78)); header.removeFromRight (2);
+    loadOnSelect.setBounds (header.removeFromRight (72)); header.removeFromRight (2);
+    autoPlay.setBounds (header.removeFromRight (66)); header.removeFromRight (2);
+    loopToggle.setBounds (header.removeFromRight (40)); header.removeFromRight (8);
+    sync.setBounds (header.removeFromRight (92));
+    syncLabel.setBounds (header.removeFromRight (58));
+    warp.setBounds (header.removeFromRight (80));
+    warpLabel.setBounds (header.removeFromRight (36)); header.removeFromRight (4);
     playButton.setBounds (header.removeFromRight (60)); header.removeFromRight (8);
 
-    auto samplerArea = r.removeFromBottom (jlimit (290, 360, (int) (getHeight() * 0.37)));
-    sampler.setBounds (samplerArea);
-    filters.setBounds (r.removeFromLeft (jlimit (250, 330, getWidth() / 5)));
-    tags.setBounds (r.removeFromRight (jlimit (270, 340, getWidth() / 5)));
-    waveform->setBounds (r.removeFromBottom (jlimit (110, 180, r.getHeight() / 3)));
-    auto bar = r.removeFromTop (32).reduced (6, 4);
-    status.setBounds (bar.removeFromRight (jmin (260, bar.getWidth() / 3)));
+    // panels sit on the dark desktop colour with thin gaps, like Live's views
+    r.reduce (3, 0);
+    r.removeFromTop (3);
+    auto samplerArea = r.removeFromBottom (jlimit (290, 350, (int) (getHeight() * 0.36)));
+    sampler.setBounds (samplerArea.withTrimmedLeft (-3).withTrimmedRight (-3));
+    r.removeFromBottom (1);
+    filters.setBounds (r.removeFromLeft (jlimit (240, 320, getWidth() / 5)));
+    r.removeFromLeft (3);
+    tags.setBounds (r.removeFromRight (jlimit (260, 330, getWidth() / 5)));
+    r.removeFromRight (3);
+    waveform->setBounds (r.removeFromBottom (jlimit (100, 170, r.getHeight() / 3)));
+    r.removeFromBottom (3);
+    auto bar = r.removeFromTop (24);
+    searchBar = bar;
+    bar.reduce (3, 3);
+    status.setBounds (bar.removeFromRight (jmin (240, bar.getWidth() / 3)));
     bar.removeFromRight (6);
     search.setBounds (bar);
     table.setBounds (r);
